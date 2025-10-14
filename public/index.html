@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sari-Sari Store Inventory</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div class="brand">
+          <h1>Sari-Sari Inventory</h1>
+          <p class="tagline">Track products and keep the shelves stocked.</p>
+        </div>
+        <div class="header-actions">
+          <button class="ghost-button" id="refresh-demo" type="button">
+            Sync Inventory
+          </button>
+          <button class="danger-button" id="reset-inventory" type="button">
+            Reset Inventory
+          </button>
+        </div>
+      </header>
+
+      <section class="card input-card">
+        <h2>Add New Item</h2>
+        <form id="item-form" novalidate>
+          <div class="form-grid">
+            <label class="input-group">
+              <span>Product Name</span>
+              <input
+                id="product-name"
+                name="name"
+                type="text"
+                placeholder="e.g., Instant Noodles"
+                required
+              />
+            </label>
+            <label class="input-group">
+              <span>Price</span>
+              <input
+                id="product-price"
+                name="price"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </label>
+            <label class="input-group">
+              <span>Quantity</span>
+              <input
+                id="product-quantity"
+                name="quantity"
+                type="number"
+                min="0"
+                placeholder="0"
+                required
+              />
+            </label>
+          </div>
+          <div class="form-actions">
+            <button class="primary-button" type="submit" id="add-item">
+              Add Item
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card table-card">
+        <header class="table-header">
+          <h2>Inventory</h2>
+          <div class="table-tools">
+            <input
+              type="search"
+              id="search"
+              placeholder="Search item..."
+              aria-label="Search inventory"
+            />
+          </div>
+        </header>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Product</th>
+                <th scope="col">Price</th>
+                <th scope="col">Quantity</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-body">
+              <tr class="empty-state">
+                <td colspan="4">
+                  <div>
+                    <p>No items yet</p>
+                    <small>Add an item to see it appear here.</small>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card summary-card">
+        <div class="summary-item">
+          <span class="summary-label">💰 Total Inventory Value</span>
+          <span class="summary-value" id="inventory-value">₱0.00</span>
+        </div>
+        <div class="summary-item">
+          <span class="summary-label">🧾 Total Sales</span>
+          <span class="summary-value" id="sales-total">₱0.00</span>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop" id="quantity-modal" hidden>
+      <section
+        class="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="quantity-modal-title"
+        aria-describedby="quantity-modal-message"
+      >
+        <header class="modal-header">
+          <h2 id="quantity-modal-title">Adjust Quantity</h2>
+          <p class="modal-message" id="quantity-modal-message"></p>
+        </header>
+        <form id="quantity-modal-form">
+          <label class="modal-input-group">
+            <span>Quantity</span>
+            <input
+              id="quantity-modal-input"
+              type="number"
+              min="1"
+              step="1"
+              inputmode="numeric"
+              required
+            />
+          </label>
+          <p class="modal-error" id="quantity-modal-error" role="alert" hidden>
+            Quantity must be greater than zero.
+          </p>
+          <div class="modal-actions">
+            <button
+              type="button"
+              class="ghost-button"
+              id="quantity-modal-cancel"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="primary-button"
+              id="quantity-modal-confirm"
+            >
+              Confirm
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="confirm-modal" hidden>
+      <section
+        class="modal-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-modal-title"
+        aria-describedby="confirm-modal-message"
+      >
+        <header class="modal-header">
+          <h2 id="confirm-modal-title">Confirm Action</h2>
+          <p class="modal-message" id="confirm-modal-message"></p>
+        </header>
+        <div class="modal-actions">
+          <button type="button" class="ghost-button" id="confirm-modal-cancel">
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="danger-button"
+            id="confirm-modal-confirm"
+          >
+            Confirm
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

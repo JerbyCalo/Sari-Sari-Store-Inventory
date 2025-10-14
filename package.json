@@ -1,0 +1,15 @@
+{
+  "name": "sari-sari-inventory-electron",
+  "version": "1.0.0",
+  "description": "Sari-Sari Store Inventory desktop app built with Electron, HTML, CSS, and JavaScript.",
+  "main": "main.js",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . SariSariInventoryApp --platform=win32 --arch=x64 --out=build --overwrite"
+  },
+  "devDependencies": {
+    "electron": "^29.1.0",
+    "electron-packager": "^17.1.2"
+  }
+}

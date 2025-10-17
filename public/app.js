@@ -6,7 +6,11 @@ const resetButton = document.getElementById("reset-inventory");
 const searchField = document.getElementById("search");
 const inventoryValueEl = document.getElementById("inventory-value");
 const salesTotalEl = document.getElementById("sales-total");
+const profitTotalEl = document.getElementById("profit-total");
 const productNameInput = document.getElementById("product-name");
+const salesReportButton = document.getElementById("sales-report-button");
+// const lowStockAlert = document.getElementById("low-stock-alert");
+// const lowStockMessage = document.getElementById("low-stock-message");
 const quantityModal = document.getElementById("quantity-modal");
 const quantityModalForm = document.getElementById("quantity-modal-form");
 const quantityModalInput = document.getElementById("quantity-modal-input");
@@ -19,6 +23,18 @@ const confirmModalTitle = document.getElementById("confirm-modal-title");
 const confirmModalMessage = document.getElementById("confirm-modal-message");
 const confirmModalConfirm = document.getElementById("confirm-modal-confirm");
 const confirmModalCancel = document.getElementById("confirm-modal-cancel");
+const editModal = document.getElementById("edit-modal");
+const editModalForm = document.getElementById("edit-modal-form");
+const editModalTitle = document.getElementById("edit-modal-title");
+const editProductName = document.getElementById("edit-product-name");
+const editProductPrice = document.getElementById("edit-product-price");
+const editProductCostPrice = document.getElementById("edit-product-cost-price");
+const editProductQuantity = document.getElementById("edit-product-quantity");
+const editModalError = document.getElementById("edit-modal-error");
+const editModalCancel = document.getElementById("edit-modal-cancel");
+const salesModal = document.getElementById("sales-modal");
+const salesHistoryList = document.getElementById("sales-history-list");
+const salesModalClose = document.getElementById("sales-modal-close");
 
 const hasInventoryBridge =
   typeof window !== "undefined" && !!window.inventoryAPI;
@@ -29,6 +45,8 @@ const appState = {
   items: [],
   filter: "",
   salesTotal: 0,
+  currentEditItemId: null,
+  salesHistory: [],
 };
 
 const escapeHtml = (value) => {
@@ -309,6 +327,9 @@ const sanitizeItem = (item) => {
   const quantity = Number.isInteger(Number(item.quantity))
     ? Number.parseInt(item.quantity, 10)
     : 0;
+  const costPrice = Number.isFinite(Number(item.costPrice))
+    ? Number.parseFloat(Number(item.costPrice).toFixed(2))
+    : 0;
 
   if (!name) {
     return null;
@@ -319,6 +340,7 @@ const sanitizeItem = (item) => {
     name,
     price: price >= 0 ? price : 0,
     quantity: quantity >= 0 ? quantity : 0,
+    costPrice: costPrice >= 0 ? costPrice : 0,
   };
 };
 
@@ -366,6 +388,51 @@ const calculateTotalInventoryValue = () =>
 const calculateTotalSales = () =>
   Number.isFinite(appState.salesTotal) ? appState.salesTotal : 0;
 
+const calculateTotalProfit = () => {
+  if (
+    !Array.isArray(appState.salesHistory) ||
+    appState.salesHistory.length === 0
+  ) {
+    return 0;
+  }
+
+  const profitTotal = appState.salesHistory.reduce((total, sale) => {
+    const saleTotal = Number.parseFloat(sale?.totalAmount);
+    const quantitySold = Number.parseFloat(sale?.quantitySold);
+    const unitCost = Number.parseFloat(sale?.costPrice);
+
+    const normalizedSaleTotal = Number.isFinite(saleTotal) ? saleTotal : 0;
+    const normalizedQuantity = Number.isFinite(quantitySold) ? quantitySold : 0;
+    const normalizedUnitCost = Number.isFinite(unitCost) ? unitCost : 0;
+
+    const costTotal = normalizedQuantity * normalizedUnitCost;
+    const profit = normalizedSaleTotal - costTotal;
+
+    return total + profit;
+  }, 0);
+
+  return Number.parseFloat(profitTotal.toFixed(2));
+};
+
+// const checkLowStock = () => {
+//   if (!lowStockAlert || !lowStockMessage) {
+//     return;
+//   }
+
+//   const productCount = Array.isArray(appState.items)
+//     ? appState.items.length
+//     : 0;
+
+//   if (productCount > 0 && productCount <= 3) {
+//     const itemNames = appState.items.map((item) => item.name).join(", ");
+//     const suffix = productCount === 1 ? "product" : "products";
+//     lowStockMessage.textContent = `Low inventory alert: Only ${productCount} ${suffix} in stock — ${itemNames}`;
+//     lowStockAlert.removeAttribute("hidden");
+//   } else {
+//     lowStockAlert.setAttribute("hidden", "");
+//   }
+// };
+
 const setTableToMessage = (message) => {
   if (!inventoryTableBody) {
     return;
@@ -391,9 +458,16 @@ const renderSummary = () => {
     calculateTotalInventoryValue().toFixed(2)
   );
   const totalSales = Number.parseFloat(calculateTotalSales().toFixed(2));
+  const totalProfit = Number.parseFloat(calculateTotalProfit().toFixed(2));
 
   inventoryValueEl.textContent = formatCurrency(totalValue);
   salesTotalEl.textContent = formatCurrency(totalSales);
+
+  if (profitTotalEl) {
+    profitTotalEl.textContent = formatCurrency(totalProfit);
+  }
+
+  // checkLowStock();
 };
 
 const renderInventory = () => {
@@ -420,6 +494,9 @@ const renderInventory = () => {
         <td><span class="badge">${escapeHtml(item.quantity)}</span></td>
         <td>
           <div class="actions-group">
+            <button type="button" class="action-button action-button--edit" data-edit="${escapeHtml(
+              item.id
+            )}">Edit</button>
             <button type="button" class="action-button action-button--sell" data-sell="${escapeHtml(
               item.id
             )}">Sell</button>
@@ -458,6 +535,7 @@ const listInventory = async () => {
 
   try {
     const payload = await window.inventoryAPI.list();
+    appState.salesHistory = await window.inventoryAPI.getSalesHistory();
     applyInventoryPayload(payload);
   } catch (error) {
     console.error("Failed to load inventory", error);
@@ -473,6 +551,7 @@ const handleAddItem = async (event) => {
     name: formData.get("name")?.trim() || "",
     price: Number.parseFloat(formData.get("price")),
     quantity: Number.parseInt(formData.get("quantity"), 10),
+    costPrice: Number.parseFloat(formData.get("costPrice")) || 0,
   };
 
   if (!payload.name) {
@@ -492,14 +571,22 @@ const handleAddItem = async (event) => {
     return;
   }
 
+  if (!Number.isFinite(payload.costPrice) || payload.costPrice < 0) {
+    window.alert("Cost price must be zero or greater.");
+    return;
+  }
+
   payload.price = Number.parseFloat(payload.price.toFixed(2));
+  payload.costPrice = Number.parseFloat(payload.costPrice.toFixed(2));
 
   setFormBusy(true);
 
   try {
     if (hasInventoryBridge) {
-      const updated = await window.inventoryAPI.add(payload);
-      applyInventoryPayload(updated);
+      const updated = await window.inventoryAPI.list();
+      appState.salesHistory = await window.inventoryAPI.getSalesHistory();
+      const added = await window.inventoryAPI.add(payload);
+      applyInventoryPayload(added);
     } else {
       const fallbackItem = {
         id: `preview-${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -529,6 +616,16 @@ const processDelete = async (deleteButton) => {
     return;
   }
 
+  const wantsDelete = await requestConfirmation({
+    title: "Confirm Delete",
+    message: `Are you sure you want to delete "${targetItem.name}"? This action cannot be undone.`,
+    confirmLabel: "Delete",
+  });
+
+  if (!wantsDelete) {
+    return;
+  }
+
   const quantity = await requestQuantity({
     title: `Delete ${targetItem.name}`,
     message: `Enter quantity to delete (available: ${targetItem.quantity})`,
@@ -548,6 +645,7 @@ const processDelete = async (deleteButton) => {
         id: itemId,
         quantityToRemove: quantity,
       });
+      appState.salesHistory = await window.inventoryAPI.getSalesHistory();
       applyInventoryPayload(updated);
     } else {
       const fallbackIndex = fallbackInventory.findIndex(
@@ -601,6 +699,19 @@ const processSale = async (sellButton) => {
     return;
   }
 
+  const totalAmount = targetItem.price * quantity;
+  const wantsSell = await requestConfirmation({
+    title: "Confirm Sale",
+    message: `Record sale of ${quantity} x ${
+      targetItem.name
+    } for ${formatCurrency(totalAmount)}?`,
+    confirmLabel: "Confirm Sale",
+  });
+
+  if (!wantsSell) {
+    return;
+  }
+
   sellButton.disabled = true;
   sellButton.textContent = "Selling...";
 
@@ -610,6 +721,7 @@ const processSale = async (sellButton) => {
         id: itemId,
         quantitySold: quantity,
       });
+      appState.salesHistory = await window.inventoryAPI.getSalesHistory();
       applyInventoryPayload(updated);
     } else {
       const fallbackIndex = fallbackInventory.findIndex(
@@ -649,6 +761,234 @@ const processSale = async (sellButton) => {
   }
 };
 
+const hideEditModal = () => {
+  if (!editModal) {
+    return;
+  }
+
+  editModal.classList.remove("is-open");
+  setTimeout(() => {
+    if (!editModal.classList.contains("is-open")) {
+      editModal.setAttribute("hidden", "");
+    }
+  }, 160);
+};
+
+const showEditModal = (item) => {
+  if (
+    !editModal ||
+    !editModalForm ||
+    !editProductName ||
+    !editProductPrice ||
+    !editProductCostPrice ||
+    !editProductQuantity
+  ) {
+    return;
+  }
+
+  appState.currentEditItemId = item.id;
+
+  editProductName.value = item.name;
+  editProductPrice.value = item.price;
+  editProductCostPrice.value = item.costPrice || 0;
+  editProductQuantity.value = item.quantity;
+
+  if (editModalError) {
+    editModalError.hidden = true;
+  }
+
+  editModal.removeAttribute("hidden");
+  requestAnimationFrame(() => {
+    editModal.classList.add("is-open");
+    editProductName.focus();
+  });
+};
+
+const processEdit = async (editButton) => {
+  const itemId = editButton.getAttribute("data-edit");
+  if (!itemId) {
+    return;
+  }
+
+  const targetItem = appState.items.find((item) => item.id === itemId);
+  if (!targetItem) {
+    return;
+  }
+
+  showEditModal(targetItem);
+};
+
+const handleEditSubmit = async (event) => {
+  event.preventDefault();
+
+  if (!appState.currentEditItemId) {
+    return;
+  }
+
+  const name = editProductName.value.trim();
+  const price = Number.parseFloat(editProductPrice.value);
+  const costPrice = Number.parseFloat(editProductCostPrice.value);
+  const quantity = Number.parseInt(editProductQuantity.value, 10);
+
+  if (!name) {
+    if (editModalError) {
+      editModalError.textContent = "Product name is required.";
+      editModalError.hidden = false;
+    }
+    return;
+  }
+
+  if (!Number.isFinite(price) || price < 0) {
+    if (editModalError) {
+      editModalError.textContent = "Price must be zero or greater.";
+      editModalError.hidden = false;
+    }
+    return;
+  }
+
+  if (!Number.isFinite(costPrice) || costPrice < 0) {
+    if (editModalError) {
+      editModalError.textContent = "Cost price must be zero or greater.";
+      editModalError.hidden = false;
+    }
+    return;
+  }
+
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    if (editModalError) {
+      editModalError.textContent =
+        "Quantity must be a whole number greater than or equal to zero.";
+      editModalError.hidden = false;
+    }
+    return;
+  }
+
+  try {
+    if (hasInventoryBridge) {
+      const updated = await window.inventoryAPI.update({
+        id: appState.currentEditItemId,
+        name,
+        price,
+        costPrice,
+        quantity,
+      });
+      appState.salesHistory = await window.inventoryAPI.getSalesHistory();
+      applyInventoryPayload(updated);
+    } else {
+      const fallbackIndex = fallbackInventory.findIndex(
+        (item) => item.id === appState.currentEditItemId
+      );
+      if (fallbackIndex >= 0) {
+        fallbackInventory[fallbackIndex] = {
+          ...fallbackInventory[fallbackIndex],
+          name,
+          price: Number.parseFloat(price.toFixed(2)),
+          costPrice: Number.parseFloat(costPrice.toFixed(2)),
+          quantity,
+        };
+        applyInventoryPayload(getFallbackPayload());
+      }
+    }
+
+    hideEditModal();
+    appState.currentEditItemId = null;
+  } catch (error) {
+    console.error("Failed to update item", error);
+    if (editModalError) {
+      editModalError.textContent = "Unable to update item. Please try again.";
+      editModalError.hidden = false;
+    }
+  }
+};
+
+const handleEditCancel = () => {
+  hideEditModal();
+  appState.currentEditItemId = null;
+};
+
+const hideSalesModal = () => {
+  if (!salesModal) {
+    return;
+  }
+
+  salesModal.classList.remove("is-open");
+  setTimeout(() => {
+    if (!salesModal.classList.contains("is-open")) {
+      salesModal.setAttribute("hidden", "");
+    }
+  }, 160);
+};
+
+const showSalesModal = async () => {
+  if (!salesModal || !salesHistoryList) {
+    return;
+  }
+
+  salesHistoryList.innerHTML =
+    '<p class="text-muted">Loading sales history...</p>';
+
+  salesModal.removeAttribute("hidden");
+  requestAnimationFrame(() => {
+    salesModal.classList.add("is-open");
+  });
+
+  try {
+    if (hasInventoryBridge) {
+      appState.salesHistory = await window.inventoryAPI.getSalesHistory();
+    }
+
+    if (!appState.salesHistory || appState.salesHistory.length === 0) {
+      salesHistoryList.innerHTML =
+        '<p class="text-muted">No sales recorded yet.</p>';
+      return;
+    }
+
+    const historyHtml = appState.salesHistory
+      .map(
+        (sale) => `
+        <div class="sales-entry">
+          <div class="sales-entry-header">
+            <span class="sales-entry-name">${escapeHtml(sale.itemName)}</span>
+            <span class="sales-entry-amount">${formatCurrency(
+              sale.totalAmount
+            )}</span>
+          </div>
+          <div class="sales-entry-details">
+            <div class="sales-entry-detail">
+              <span>Quantity:</span>
+              <span>${escapeHtml(sale.quantitySold)}</span>
+            </div>
+            <div class="sales-entry-detail">
+              <span>Unit Price:</span>
+              <span>${formatCurrency(sale.unitPrice)}</span>
+            </div>
+            <div class="sales-entry-detail">
+              <span>Profit:</span>
+              <span>${formatCurrency(sale.profit)}</span>
+            </div>
+          </div>
+          <div class="sales-entry-date">${escapeHtml(sale.date)}</div>
+        </div>
+      `
+      )
+      .join("");
+
+    salesHistoryList.innerHTML = historyHtml;
+  } catch (error) {
+    console.error("Failed to load sales history", error);
+    salesHistoryList.innerHTML =
+      '<p class="text-muted">Unable to load sales history.</p>';
+  }
+};
+
+const handleSalesReportClick = async () => {
+  await showSalesModal();
+};
+
+const handleSalesModalClose = () => {
+  hideSalesModal();
+};
+
 const handleTableClick = async (event) => {
   const sellButton = event.target.closest("[data-sell]");
   if (sellButton) {
@@ -659,6 +999,12 @@ const handleTableClick = async (event) => {
   const deleteButton = event.target.closest("[data-delete]");
   if (deleteButton) {
     await processDelete(deleteButton);
+    return;
+  }
+
+  const editButton = event.target.closest("[data-edit]");
+  if (editButton) {
+    await processEdit(editButton);
   }
 };
 
@@ -681,6 +1027,7 @@ const handleResetClick = async () => {
   if (hasInventoryBridge) {
     try {
       const payload = await window.inventoryAPI.reset();
+      appState.salesHistory = [];
       applyInventoryPayload(payload);
     } catch (error) {
       console.error("Failed to reset inventory", error);
@@ -693,6 +1040,7 @@ const handleResetClick = async () => {
 
   fallbackInventory.splice(0, fallbackInventory.length);
   fallbackSalesTotal = 0;
+  appState.salesHistory = [];
   applyInventoryPayload(getFallbackPayload());
   window.focus?.();
   focusPrimaryInput();
@@ -708,5 +1056,19 @@ inventoryTableBody?.addEventListener("click", handleTableClick);
 refreshButton?.addEventListener("click", handleRefreshClick);
 resetButton?.addEventListener("click", handleResetClick);
 searchField?.addEventListener("input", handleSearchInput);
+editModalForm?.addEventListener("submit", handleEditSubmit);
+editModalCancel?.addEventListener("click", handleEditCancel);
+editModal?.addEventListener("click", (event) => {
+  if (event.target === editModal) {
+    handleEditCancel();
+  }
+});
+salesReportButton?.addEventListener("click", handleSalesReportClick);
+salesModalClose?.addEventListener("click", handleSalesModalClose);
+salesModal?.addEventListener("click", (event) => {
+  if (event.target === salesModal) {
+    handleSalesModalClose();
+  }
+});
 
 listInventory();

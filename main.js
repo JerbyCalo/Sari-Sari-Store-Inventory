@@ -4,6 +4,7 @@ const fs = require("fs/promises");
 const { randomUUID } = require("crypto");
 
 const dataFilePath = path.join(__dirname, "data", "inventory.json");
+const salesFilePath = path.join(__dirname, "data", "sales.json");
 
 const defaultData = {
   items: [],
@@ -33,6 +34,33 @@ const ensureDataFileExists = async () => {
   }
 };
 
+const ensureSalesFileExists = async () => {
+  try {
+    await fs.access(salesFilePath);
+  } catch (error) {
+    await fs.mkdir(path.dirname(salesFilePath), { recursive: true });
+    await fs.writeFile(salesFilePath, JSON.stringify([], null, 2), "utf8");
+  }
+};
+
+const readSalesHistory = async () => {
+  await ensureSalesFileExists();
+  try {
+    const fileContent = await fs.readFile(salesFilePath, "utf8");
+    const parsed = JSON.parse(fileContent);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (error) {
+    console.error("Failed to read sales history", error);
+    return [];
+  }
+};
+
+const logSale = async (saleRecord) => {
+  const history = await readSalesHistory();
+  history.unshift(saleRecord);
+  await fs.writeFile(salesFilePath, JSON.stringify(history, null, 2), "utf8");
+};
+
 const normalizeItem = (item) => {
   if (!item || typeof item !== "object") {
     return null;
@@ -44,6 +72,9 @@ const normalizeItem = (item) => {
     price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
     quantity: Number.isInteger(Number(item.quantity))
       ? Number.parseInt(item.quantity, 10)
+      : 0,
+    costPrice: Number.isFinite(Number(item.costPrice))
+      ? Number(item.costPrice)
       : 0,
   };
 
@@ -59,6 +90,11 @@ const normalizeItem = (item) => {
   normalized.quantity =
     Number.isInteger(normalized.quantity) && normalized.quantity >= 0
       ? normalized.quantity
+      : 0;
+
+  normalized.costPrice =
+    Number.isFinite(normalized.costPrice) && normalized.costPrice >= 0
+      ? Number.parseFloat(normalized.costPrice.toFixed(2))
       : 0;
 
   return normalized;
@@ -141,6 +177,7 @@ const validateIncomingItem = (incoming) => {
   const name = typeof incoming?.name === "string" ? incoming.name.trim() : "";
   const priceValue = Number.parseFloat(incoming?.price);
   const quantityValue = Number.parseInt(incoming?.quantity, 10);
+  const costPriceValue = Number.parseFloat(incoming?.costPrice);
 
   if (!name) {
     throw new Error("Product name is required.");
@@ -154,10 +191,20 @@ const validateIncomingItem = (incoming) => {
     throw new Error("Quantity must be a non-negative integer.");
   }
 
+  if (incoming?.costPrice !== undefined) {
+    if (!Number.isFinite(costPriceValue) || costPriceValue < 0) {
+      throw new Error("Cost price must be a non-negative number.");
+    }
+  }
+
   return {
     name,
     price: Number.parseFloat(priceValue.toFixed(2)),
     quantity: quantityValue,
+    costPrice:
+      Number.isFinite(costPriceValue) && costPriceValue >= 0
+        ? Number.parseFloat(costPriceValue.toFixed(2))
+        : 0,
   };
 };
 
@@ -220,7 +267,49 @@ const resetInventory = async () => {
   };
 
   await writeData(resetPayload);
+
+  // Also reset sales history
+  await fs.writeFile(salesFilePath, JSON.stringify([], null, 2), "utf8");
+
   return resetPayload;
+};
+
+const updateInventoryItem = async (payload) => {
+  const data = await readData();
+  const { id, name, price, quantity, costPrice } = payload || {};
+
+  if (!id) {
+    throw new Error("Item id is required for update.");
+  }
+
+  const index = data.items.findIndex((item) => item.id === id);
+
+  if (index === -1) {
+    throw new Error("Item not found.");
+  }
+
+  const updates = {};
+
+  if (typeof name === "string" && name.trim()) {
+    updates.name = name.trim();
+  }
+
+  if (Number.isFinite(Number(price)) && Number(price) >= 0) {
+    updates.price = Number.parseFloat(Number(price).toFixed(2));
+  }
+
+  if (Number.isInteger(Number(quantity)) && Number(quantity) >= 0) {
+    updates.quantity = Number.parseInt(quantity, 10);
+  }
+
+  if (Number.isFinite(Number(costPrice)) && Number(costPrice) >= 0) {
+    updates.costPrice = Number.parseFloat(Number(costPrice).toFixed(2));
+  }
+
+  data.items[index] = { ...data.items[index], ...updates };
+
+  await writeData(data);
+  return data;
 };
 
 const recordSale = async (payload) => {
@@ -251,6 +340,22 @@ const recordSale = async (payload) => {
 
   const updatedQuantity = item.quantity - saleQuantity;
   const saleAmount = Number.parseFloat((item.price * saleQuantity).toFixed(2));
+
+  // Log sale to sales.json
+  const saleRecord = {
+    itemName: item.name,
+    quantitySold: saleQuantity,
+    totalAmount: saleAmount,
+    unitPrice: item.price,
+    costPrice: item.costPrice || 0,
+    profit: Number.parseFloat(
+      ((item.price - (item.costPrice || 0)) * saleQuantity).toFixed(2)
+    ),
+    timestamp: new Date().toISOString(),
+    date: new Date().toLocaleString(),
+  };
+
+  await logSale(saleRecord);
 
   if (updatedQuantity > 0) {
     data.items[index] = { ...item, quantity: updatedQuantity };
@@ -311,3 +416,7 @@ ipcMain.handle("inventory:sell", async (_event, payload) =>
   recordSale(payload)
 );
 ipcMain.handle("inventory:reset", async () => resetInventory());
+ipcMain.handle("inventory:update", async (_event, payload) =>
+  updateInventoryItem(payload)
+);
+ipcMain.handle("sales:history", async () => readSalesHistory());

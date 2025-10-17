@@ -14,6 +14,9 @@
           <p class="tagline">Track products and keep the shelves stocked.</p>
         </div>
         <div class="header-actions">
+          <button class="ghost-button" id="sales-report-button" type="button">
+            Sales Report
+          </button>
           <button class="ghost-button" id="refresh-demo" type="button">
             Sync Inventory
           </button>
@@ -42,6 +45,18 @@
               <input
                 id="product-price"
                 name="price"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                required
+              />
+            </label>
+            <label class="input-group">
+              <span>Cost Price</span>
+              <input
+                id="product-cost-price"
+                name="costPrice"
                 type="number"
                 step="0.01"
                 min="0"
@@ -114,7 +129,16 @@
           <span class="summary-label">🧾 Total Sales</span>
           <span class="summary-value" id="sales-total">₱0.00</span>
         </div>
+        <div class="summary-item">
+          <span class="summary-label">📈 Total Profit</span>
+          <span class="summary-value" id="profit-total">₱0.00</span>
+        </div>
       </section>
+
+      <!-- <div id="low-stock-alert" class="alert alert-warning" hidden>
+        <span class="alert-icon">⚠️</span>
+        <span id="low-stock-message">Low stock alert</span>
+      </div> -->
     </main>
 
     <div class="modal-backdrop" id="quantity-modal" hidden>
@@ -186,6 +210,91 @@
             id="confirm-modal-confirm"
           >
             Confirm
+          </button>
+        </div>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="edit-modal" hidden>
+      <section
+        class="modal-panel modal-panel-large"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="edit-modal-title"
+      >
+        <header class="modal-header">
+          <h2 id="edit-modal-title">Edit Item</h2>
+        </header>
+        <form id="edit-modal-form">
+          <div class="modal-form-grid">
+            <label class="modal-input-group">
+              <span>Product Name</span>
+              <input id="edit-product-name" type="text" required />
+            </label>
+            <label class="modal-input-group">
+              <span>Price</span>
+              <input
+                id="edit-product-price"
+                type="number"
+                step="0.01"
+                min="0"
+                required
+              />
+            </label>
+            <label class="modal-input-group">
+              <span>Cost Price</span>
+              <input
+                id="edit-product-cost-price"
+                type="number"
+                step="0.01"
+                min="0"
+                required
+              />
+            </label>
+            <label class="modal-input-group">
+              <span>Quantity</span>
+              <input
+                id="edit-product-quantity"
+                type="number"
+                min="0"
+                required
+              />
+            </label>
+          </div>
+          <p class="modal-error" id="edit-modal-error" role="alert" hidden></p>
+          <div class="modal-actions">
+            <button type="button" class="ghost-button" id="edit-modal-cancel">
+              Cancel
+            </button>
+            <button
+              type="submit"
+              class="primary-button"
+              id="edit-modal-confirm"
+            >
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="modal-backdrop" id="sales-modal" hidden>
+      <section
+        class="modal-panel modal-panel-large"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sales-modal-title"
+      >
+        <header class="modal-header">
+          <h2 id="sales-modal-title">Sales History</h2>
+          <p class="modal-message">Recent transactions</p>
+        </header>
+        <div class="sales-history-container" id="sales-history-list">
+          <p class="text-muted">Loading sales history...</p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="primary-button" id="sales-modal-close">
+            Close
           </button>
         </div>
       </section>

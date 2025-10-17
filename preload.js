@@ -6,6 +6,8 @@ const api = {
   delete: (payload) => ipcRenderer.invoke("inventory:delete", payload),
   sell: (payload) => ipcRenderer.invoke("inventory:sell", payload),
   reset: () => ipcRenderer.invoke("inventory:reset"),
+  update: (payload) => ipcRenderer.invoke("inventory:update", payload),
+  getSalesHistory: () => ipcRenderer.invoke("sales:history"),
 };
 
 contextBridge.exposeInMainWorld("inventoryAPI", api);
